@@ -1,0 +1,20 @@
+# Paths that exist on `release` and are force-restored from the
+# previous release tip after every squash-merge from `main`. This
+# protects them from accidental clobber if `main` is ever touched
+# in a way that affects them, and keeps divergent-content paths
+# (like README.md) anchored to the release-side version.
+#
+# See AGENTS.md (on `main`) and the `release-cut` skill for the
+# mechanism.
+
+# Manifests — defensive: never let `main` accidentally redefine these.
+.release-exclude
+.release-only
+
+# Release-side CI / publish workflows — none yet. Reserved.
+.github/workflows/release.yml
+
+# Public-facing README — content differs from the develop-side README.
+# Listed in both .release-exclude and .release-only: the exclude step
+# drops main's README, the only step restores release's README.
+README.md

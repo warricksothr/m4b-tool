@@ -1,0 +1,5 @@
+*.test
+/dist/
+/bin/
+/m4b-tool
+.claude/

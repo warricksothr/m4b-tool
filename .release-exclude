@@ -1,0 +1,14 @@
+# Paths tracked on `main` that must NOT appear on `release`.
+# Stripped from the index and worktree after every
+# `git merge --squash main` (and on the initial orphan cut).
+#
+# See AGENTS.md (on `main`) and the `release-cut` skill for the
+# mechanism. .gitignore-style patterns; trailing `/` denotes a directory.
+
+# Agent orientation — only relevant during development on `main`.
+CLAUDE.md
+AGENTS.md
+.claude/
+
+# Develop-side README — `release` carries its own consumer-focused README.
+README.md

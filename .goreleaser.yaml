@@ -1,0 +1,74 @@
+# GoReleaser config — runs on tag push, builds release artifacts for
+# linux/darwin/windows × amd64/arm64. The Docker image is built
+# separately (see Dockerfile); we don't bundle it here because the
+# image needs ffmpeg + mp4v2 baked in and that's a different build
+# graph than a static Go binary cross-compile.
+#
+# Sanity-check locally with `goreleaser release --snapshot --clean`.
+
+version: 2
+
+project_name: m4b-tool
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: m4b-tool
+    main: ./cmd/m4b-tool
+    binary: m4b-tool
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE*
+      - README*
+      - spec/**/*
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  draft: true
+  prerelease: auto
+  header: |
+    ## m4b-tool {{ .Tag }}
+
+    The CLI binary is statically linked Go; running it still requires
+    ffmpeg and mp4v2 utilities on PATH (see `m4b-tool doctor`). The
+    Docker image bundles both — pull `ghcr.io/warricksothr/m4b-tool:{{ .Tag }}`
+    if you don't want to install them yourself.
