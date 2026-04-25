@@ -12,3 +12,7 @@ AGENTS.md
 
 # Develop-side README — `release` carries its own consumer-focused README.
 README.md
+
+# Forgejo-side CI workflows. Tests/lint run only on the development
+# host, not on the public mirror — see AGENTS.md "CI/CD layout".
+.forgejo/
