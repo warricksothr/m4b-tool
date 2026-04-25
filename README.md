@@ -21,12 +21,6 @@ Go binary and a smaller runtime footprint.
 
 ### Container (recommended — bundles ffmpeg + mp4v2)
 
-> **Note:** the container image may not yet be published. If
-> `docker.io/library/...` or `ghcr.io/warricksothr/m4b-tool` returns
-> "image not found", build from the [Containerfile](Containerfile) or
-> use one of the other install paths below. This notice will go away
-> once an image-publishing workflow is in place.
-
 ```sh
 podman run --rm -v "$PWD:/work" ghcr.io/warricksothr/m4b-tool:latest doctor
 ```
