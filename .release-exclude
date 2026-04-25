@@ -16,3 +16,8 @@ README.md
 # Forgejo-side CI workflows. Tests/lint run only on the development
 # host, not on the public mirror — see AGENTS.md "CI/CD layout".
 .forgejo/
+
+# Renovate config. Renovate runs on the development host (Forgejo),
+# never against the public mirror, so the config has no business
+# being on `release`.
+renovate.json
