@@ -24,7 +24,7 @@ or newer, and refuse older only if output format differs.
 | Tool   | Pinned version | Notes                               |
 |--------|---------------|--------------------------------------|
 | ffmpeg | 5.0.1         | Needs `silencedetect`, `-f ffmetadata`, `-f concat`, `-movflags +faststart`. |
-| mp4v2  | 2.1.0         | Supplies `mp4chaps`, `mp4art`, `mp4tags`, `mp4info`. Upstream is unmaintained and has been dropped from Debian/Ubuntu repos; the maintained continuation is [`enzo1982/mp4v2`](https://github.com/enzo1982/mp4v2), with `v2.1.0` as its latest tagged release. Build from source with `cmake`; the Docker image in Milestone 9 should clone and build it rather than relying on a distro package. |
+| mp4v2  | 2.1.3 (commit-pinned) | Supplies `mp4chaps`, `mp4art`, `mp4tags`, `mp4info`. Upstream is unmaintained and has been dropped from Debian/Ubuntu repos; the maintained continuation is [`enzo1982/mp4v2`](https://github.com/enzo1982/mp4v2). The latest tagged release is `v2.1.0` but its CMake install rules have a bug (`project.h` is generated into the build dir, install looks in source); `main` carries the fix and reports CMake project version `2.1.3`. The `Containerfile` pins `MP4V2_REF` to a specific commit on `main` for reproducibility — bump it periodically via `git ls-remote https://github.com/enzo1982/mp4v2.git refs/heads/main` to pick up upstream bug fixes. Build from source with `cmake`. |
 | fdkaac | 2.0.1         | Optional.                            |
 | tone   | 0.2.5         | Optional; min ≥ 0.0.9 checked by PHP. |
 
