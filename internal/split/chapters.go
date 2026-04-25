@@ -75,17 +75,39 @@ func (s ChapterSource) Resolve(ctx context.Context, input string, total time.Dur
 	if chs, ok := readSidecarChaptersTxt(input); ok {
 		return chs, nil
 	}
-	_ = mp // currently unused — embedded chapters come via ffmetadata below
 	if ff != nil {
 		if tag, err := ff.ReadFFMetadata(ctx, input); err == nil && len(tag.Chapters) > 0 {
 			return tag.Chapters, nil
+		}
+	}
+	// mp4chaps fallback for MP4-family inputs. ffmpeg's -f ffmetadata
+	// silently drops chapters on files with a malformed timescale even
+	// when the chapter atom itself is intact; mp4v2 reads the atom
+	// directly and is unaffected.
+	if mp != nil && isMP4FamilyExt(input) {
+		if chs, err := mp.ListChapters(ctx, input); err == nil && len(chs) > 0 {
+			return chs, nil
 		}
 	}
 	return nil, ErrNoChapters
 }
 
 // ErrNoChapters indicates that no chapter source produced any chapters.
+// The wrapping caller in split.Run formats this with a hint pointing at
+// the fallback flags (`--by-silence`, `--fixed-length`, sidecar paths).
 var ErrNoChapters = errors.New("no chapter source resolved any chapters")
+
+// isMP4FamilyExt reports whether the input's extension belongs to the
+// MP4 family that mp4v2's chapter reader understands. Mirrors
+// split.isMP4Family but takes a path so it's callable from this file
+// without an extension argument round-trip.
+func isMP4FamilyExt(input string) bool {
+	switch strings.ToLower(filepath.Ext(input)) {
+	case ".m4a", ".m4b", ".mp4":
+		return true
+	}
+	return false
+}
 
 // fixedLengthChapters yields ceil(total / length) chapters of length L,
 // with the final chapter trimmed to the remainder. Names are "1", "2",
@@ -241,10 +263,84 @@ func FillTrailingLength(chs []audio.Chapter, total time.Duration) {
 	}
 }
 
+// RenameOptions captures the post-resolution chapter Name transforms
+// applied by both `split` (via its rename flags) and `chapters export`
+// (so users can preview the same transforms in the sidecar before
+// committing to a split). Pipeline order is fixed: reindex first,
+// then strip-title, then prefix.
+type RenameOptions struct {
+	Reindex    bool
+	StripTitle bool
+	Prefix     string
+}
+
+// ApplyRename mutates chs per opts. The fixed order matches the CLI
+// flag descriptions and lets users predict the result without reading
+// the source: --reindex-chapters wins over the source name, --strip-title
+// then trims its zero padding, and --chapter-prefix labels what's left.
+func ApplyRename(chs []audio.Chapter, opts RenameOptions) {
+	if opts.Reindex {
+		ReindexChapters(chs)
+	}
+	if opts.StripTitle {
+		StripChapterTitles(chs)
+	}
+	if opts.Prefix != "" {
+		for i := range chs {
+			chs[i].Name = opts.Prefix + chs[i].Name
+		}
+	}
+}
+
 // ReindexChapters replaces every chapter's Name with its 1-based index
 // rendered as a decimal string. Used for --reindex-chapters.
 func ReindexChapters(chs []audio.Chapter) {
 	for i := range chs {
 		chs[i].Name = strconv.Itoa(i + 1)
 	}
+}
+
+// StripChapterTitles removes leading whitespace and zero characters from
+// every chapter's Name. Used for --strip-title; pairs with
+// --chapter-prefix to turn "001" into "Chapter 1" without editing the
+// sidecar. Names that are entirely whitespace or zeros collapse to "0"
+// rather than the empty string so a downstream prefix doesn't render
+// as a trailing space (e.g. "Chapter ").
+func StripChapterTitles(chs []audio.Chapter) {
+	for i := range chs {
+		stripped := strings.TrimLeft(chs[i].Name, " \t0")
+		if stripped == "" && chs[i].Name != "" {
+			stripped = "0"
+		}
+		chs[i].Name = stripped
+	}
+}
+
+// numericIndexFraction returns the fraction of chapters whose Name
+// parses as a decimal integer matching their 1-based position. Leading
+// zeros are accepted ("001" matches position 1) so the common case of
+// zero-padded numeric titles is detected. Used by Run to emit a
+// quality-of-life warning when a file's chapter atoms only carry
+// numeric indices — at that point the user can't tell tracks apart by
+// filename without a custom prefix or an edited sidecar.
+func numericIndexFraction(chs []audio.Chapter) float64 {
+	if len(chs) == 0 {
+		return 0
+	}
+	matches := 0
+	for i, ch := range chs {
+		n, err := strconv.Atoi(strings.TrimLeft(ch.Name, "0"))
+		// strings.TrimLeft("001", "0") → "1", but "0" → "" — guard
+		// the empty case so a title of "0" still parses as zero.
+		if err != nil && ch.Name != "" && strings.Trim(ch.Name, "0") == "" {
+			n, err = 0, nil
+		}
+		if err != nil {
+			continue
+		}
+		if n == i+1 {
+			matches++
+		}
+	}
+	return float64(matches) / float64(len(chs))
 }

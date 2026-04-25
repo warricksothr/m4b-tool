@@ -53,7 +53,11 @@ func runMergeCmd(args []string) int {
 		adjustForIPod   = fs.Bool("adjust-for-ipod", false, "clamp sample rate to 44100 and channels to 2")
 		trimSilence     = fs.Bool("trim-silence", false, "trim silence from middle inputs (first and last keep their boundary silence)")
 		addSilenceMs    = fs.Int("add-silence", 0, "milliseconds of silence to insert between consecutive parts")
-		jobs            = fs.Int("jobs", 0, "concurrent transcoders (default 1)")
+		jobs            = fs.Int("jobs", 0, "concurrent transcoders (default: min(8, NumCPU-1), further capped by available memory; pass 1 to force serial)")
+		noMemoryCap     = fs.Bool("no-memory-cap", false, "disable the memory-aware part of the --jobs auto-default; relevant when MemAvailable is underreported (some WSL2 setups)")
+		quiet           = fs.Bool("quiet", false, "suppress info/progress output on stderr (errors still print)")
+		quietShort      = fs.Bool("q", false, "alias for --quiet")
+		verbose         = fs.Bool("verbose", false, "add per-input \"done in <elapsed>\" lines after each transcode")
 
 		// Batch mode (M7c).
 		batchPatterns   = stringSliceFlag{}
@@ -110,6 +114,9 @@ func runMergeCmd(args []string) int {
 		TrimSilence:            *trimSilence,
 		AddSilence:             time.Duration(*addSilenceMs) * time.Millisecond,
 		Jobs:                   *jobs,
+		IgnoreMemoryCap:        *noMemoryCap,
+		Quiet:                  *quiet || *quietShort,
+		Verbose:                *verbose,
 		BatchPatterns:          []string(batchPatterns),
 		BatchPatternPath:       *batchPath,
 		BatchFilter:            *batchFilter,

@@ -78,20 +78,79 @@ you bind-mount); the container sees them under `/work`.
 ### Split an audiobook into per-chapter MP3s
 
 ```sh
-m4b-tool split --audio-format mp3 --audio-codec libmp3lame \
-  --audio-bitrate 96k --audio-channels 1 \
-  /work/book.m4b
+m4b-tool split --audio-format mp3 /work/book.m4b
 ```
 
-96 kbps mono is plenty for spoken-word narration. Drop
-`--audio-channels 1` if the source is meaningfully stereo.
+`split` picks the codec automatically from `--audio-format`
+(`libmp3lame` for `mp3`, `flac` for `flac`, etc.) and probes the
+source bitrate to pick a sensible default (capped at 192 kbps so a
+lossless source doesn't produce an absurd MP3). Override either with
+`--audio-codec` and `--audio-bitrate` if you want something specific —
+e.g. add `--audio-bitrate 96k --audio-channels 1` for spoken-word
+narration where mono at a low bitrate is plenty.
+
+Per-chapter extraction runs in parallel by default — `--jobs` defaults
+to `min(8, NumCPU-1)`, further capped by available memory. Pass
+`--jobs 1` to force serial, or `--no-memory-cap` if your platform
+under-reports `MemAvailable` (some WSL2 setups).
+
+### Preview chapter names before splitting
+
+Some `.m4b` files store chapters with bare numeric titles ("001",
+"002", ...) instead of real chapter names — `split` will still cut
+the audio correctly, but the output filenames look like `001-001.mp3`.
+Pipe `chapters export` to stdout to skim the resolved chapter list
+first:
+
+```sh
+m4b-tool chapters export /work/book.m4b - | head
+```
+
+If the titles look right (e.g. `00:00:00.000 Prologue`), just run
+`split`. If they're bare indices, you have three options:
+
+1. **Add a label, no editing.** `--chapter-prefix` prepends a literal
+   string to every chapter title; `--strip-title` first trims the
+   leading zeros:
+
+   ```sh
+   m4b-tool split --audio-format mp3 \
+     --strip-title --chapter-prefix "Chapter " \
+     /work/book.m4b
+   # -> 001-Chapter 1.mp3, 002-Chapter 2.mp3, ...
+   ```
+
+2. **Custom names via sidecar.** Dump the chapters as a `.chapters.txt`
+   sidecar, edit in your editor of choice, re-run `split`:
+
+   ```sh
+   m4b-tool chapters export /work/book.m4b   # -> book.chapters.txt
+   $EDITOR /work/book.chapters.txt           # replace "001" with real titles
+   m4b-tool split --audio-format mp3 /work/book.m4b   # sidecar auto-detected
+   ```
+
+   Sidecar format is `HH:MM:SS.mmm <title>` per line; lines starting
+   with `##` are comments. Pass `--use-existing-chapters-file` if you
+   want the sidecar to win over a file that also has embedded
+   chapters.
+
+3. **Bake-and-tweak.** Combine the above: `chapters export` accepts
+   the same `--chapter-prefix`/`--strip-title`/`--reindex-chapters`
+   flags as `split`, so you can bake the transformed names into the
+   sidecar, optionally tweak by hand, then run a flag-free `split`.
+
+   > Don't double-apply: if you bake `--chapter-prefix "Chapter "`
+   > into the sidecar **and** pass it to `split`, you'll get
+   > "Chapter Chapter 1". Pick one side.
+
+`split` warns automatically when ≥80% of resolved chapter names look
+like bare indices. Suppress with `--quiet`.
 
 ### Split by silence (when the file has no chapters)
 
 ```sh
 m4b-tool split --by-silence --silence-min-length 1500 \
-  --audio-format mp3 --audio-codec libmp3lame --audio-bitrate 96k \
-  /work/long-recording.mp3
+  --audio-format mp3 /work/long-recording.mp3
 ```
 
 `--silence-min-length` (ms) is the minimum gap that counts as a
@@ -111,7 +170,7 @@ Embedded tags carry through unless overridden via flags
 ### Split with a custom filename template
 
 ```sh
-m4b-tool split --audio-format mp3 --audio-codec libmp3lame \
+m4b-tool split --audio-format mp3 \
   --filename-template '{{printf "%02d" .Track}} - {{.Title}}' \
   /work/book.m4b
 ```

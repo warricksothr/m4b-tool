@@ -3,9 +3,11 @@ package merge
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/warricksothr/m4b-tool/internal/ffmpeg"
 )
@@ -21,7 +23,7 @@ import (
 //
 // On any per-file error, the context is cancelled to wind down the
 // other workers; the first error encountered is returned.
-func encodeAll(ctx context.Context, ff *ffmpeg.Client, inputs []string, tmpDir string, jobs int, opts ffmpeg.EncodeOptions) ([]string, error) {
+func encodeAll(ctx context.Context, ff *ffmpeg.Client, inputs []string, tmpDir string, jobs int, opts ffmpeg.EncodeOptions, verbose bool, stderr io.Writer) ([]string, error) {
 	if jobs < 1 {
 		jobs = 1
 	}
@@ -48,24 +50,35 @@ func encodeAll(ctx context.Context, ff *ffmpeg.Client, inputs []string, tmpDir s
 		})
 	}
 
+	total := len(inputs)
 	worker := func() {
 		defer wg.Done()
 		for j := range jobsCh {
 			outPath := filepath.Join(tmpDir, fmt.Sprintf("part-%04d.m4a", j.idx))
 
+			// Per-input "starting" line. With concurrent workers
+			// these can interleave, but each line names its own
+			// 1-based position so the user can still tell what's
+			// running.
+			_, _ = fmt.Fprintf(stderr, "[%d/%d] %s -> %s\n", j.idx+1, total, j.in, outPath)
+
 			perOpts := opts
 			isFirst := j.idx == 0
-			isLast := j.idx == len(inputs)-1
+			isLast := j.idx == total-1
 			if isFirst || isLast {
 				perOpts.TrimSilenceStart = false
 				perOpts.TrimSilenceEnd = false
 			}
 
+			started := time.Now()
 			if err := ff.Transcode(ctx, j.in, outPath, perOpts); err != nil {
 				recordErr(err)
 				return
 			}
 			parts[j.idx] = outPath
+			if verbose {
+				_, _ = fmt.Fprintf(stderr, "[%d/%d] done in %s\n", j.idx+1, total, time.Since(started).Round(100*time.Millisecond))
+			}
 		}
 	}
 

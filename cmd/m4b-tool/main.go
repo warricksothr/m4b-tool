@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -22,10 +23,13 @@ var (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("ok")
+		printHelp(os.Stdout)
 		return
 	}
 	switch os.Args[1] {
+	case "help", "--help", "-h":
+		printHelp(os.Stdout)
+		return
 	case "version", "--version", "-v":
 		fmt.Printf("m4b-tool %s (%s, built %s)\n", version, commit, date)
 		return
@@ -40,9 +44,35 @@ func main() {
 	case "doctor":
 		os.Exit(doctor.Run(context.Background()))
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command %q\nrun \"m4b-tool --help\" for usage\n", os.Args[1])
 		os.Exit(2)
 	}
+}
+
+// printHelp writes the top-level usage to w. Sub-command flag details
+// live with each sub-command — invoke `m4b-tool <command> --help` to
+// see them. The Go stdlib's flag.FlagSet renders that automatically
+// via the per-command fs.Usage hooks.
+func printHelp(w io.Writer) {
+	fmt.Fprint(w, `m4b-tool — manage audiobook .m4b files
+
+Usage:
+  m4b-tool <command> [flags]
+
+Commands:
+  merge      combine input files into a single tagged .m4b
+  split      extract chapters from a file into per-chapter outputs
+  chapters   read, write, shift, or repair chapter markers
+             ('chapters export <input> [output]' dumps a sidecar)
+  doctor     report which external tools are installed and runnable
+  probe      print the duration of an audio file (debug helper)
+  version    print build version info
+  help       print this message
+
+Run "m4b-tool <command> --help" for command-specific flags.
+
+Project: https://github.com/warricksothr/m4b-tool
+`)
 }
 
 // runProbe is the Milestone 1 throwaway entry point. It prints the

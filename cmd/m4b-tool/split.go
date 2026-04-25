@@ -38,13 +38,19 @@ func runSplitCmd(args []string) int {
 		useExisting    = fs.Bool("use-existing-chapters-file", false, "prefer the sidecar chapters.txt over embedded chapters")
 		cuePath        = fs.String("cuesheet", "", "explicit path to a cue sheet")
 		reindex        = fs.Bool("reindex-chapters", false, "rename chapters to 1, 2, 3, ...")
+		stripTitle     = fs.Bool("strip-title", false, `trim leading spaces and zeros from each chapter Name ("001" -> "1"); pairs with --chapter-prefix`)
+		chapterPrefix  = fs.String("chapter-prefix", "", "prepend this string to every chapter Name (after --reindex-chapters and --strip-title)")
 
 		audioFormat     = fs.String("audio-format", "", "output container (m4a, m4b, mp4, mp3, flac); default reuses the input extension")
 		audioCodec      = fs.String("audio-codec", "", "output audio codec; empty stream-copies the input")
 		audioBitrate    = fs.String("audio-bitrate", "", "output bitrate (only used when re-encoding)")
 		audioSampleRate = fs.Int("audio-samplerate", 0, "output sample rate (only used when re-encoding)")
 		audioChannels   = fs.Int("audio-channels", 0, "output channel count (only used when re-encoding)")
-		jobs            = fs.Int("jobs", 0, "concurrent per-chapter extractions (default 1)")
+		jobs            = fs.Int("jobs", 0, "concurrent per-chapter extractions (default: min(8, NumCPU-1), further capped by available memory; pass 1 to force serial)")
+		noMemoryCap     = fs.Bool("no-memory-cap", false, "disable the memory-aware part of the --jobs auto-default; relevant when MemAvailable is underreported (some WSL2 setups)")
+		quiet           = fs.Bool("quiet", false, "suppress info/progress output on stderr (errors still print)")
+		quietShort      = fs.Bool("q", false, "alias for --quiet")
+		verbose         = fs.Bool("verbose", false, "add per-chapter \"done in <elapsed>\" lines after each extract")
 
 		// Tag overrides (subset of the inherited set; applied to every output).
 		name        = fs.String("name", "", "override album/title")
@@ -80,12 +86,17 @@ func runSplitCmd(args []string) int {
 		UseExistingChaptersFile: *useExisting,
 		CueSheetPath:            *cuePath,
 		ReindexChapters:         *reindex,
+		StripTitle:              *stripTitle,
+		ChapterPrefix:           *chapterPrefix,
 		AudioFormat:             *audioFormat,
 		AudioCodec:              *audioCodec,
 		AudioBitrate:            *audioBitrate,
 		AudioSampleRate:         *audioSampleRate,
 		AudioChannels:           *audioChannels,
 		Jobs:                    *jobs,
+		IgnoreMemoryCap:         *noMemoryCap,
+		Quiet:                   *quiet || *quietShort,
+		Verbose:                 *verbose,
 		TagOverrides: audio.Tag{
 			Title:       *name,
 			Album:       *album,

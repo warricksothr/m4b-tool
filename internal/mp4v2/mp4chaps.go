@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -55,6 +56,78 @@ func (c *Client) WriteChapters(ctx context.Context, path string, chapters []audi
 		return fmt.Errorf("mp4chaps -i: %w", err)
 	}
 	return nil
+}
+
+// reMp4ChapsListLine matches one row of `mp4chaps -l` output:
+//
+//	Chapter #001 - 00:00:00.000 - "Opening Credits"
+//
+// The chapter index is captured for completeness but ignored — Resolve
+// renumbers via FillTrailingLength + ReindexChapters anyway. The
+// timestamp uses the same HH:MM:SS.ms grammar audio.ParseDuration
+// understands. Title is captured greedily up to the closing quote on
+// the same line; titles with embedded `"` would technically need
+// escape handling, but mp4chaps's listing format does not escape, so
+// the only way to break parsing is to put a literal `"` followed by
+// end-of-line in the chapter title — vanishingly rare.
+var reMp4ChapsListLine = regexp.MustCompile(`^\s*Chapter #(\d+)\s+-\s+(\d+:\d+:\d+\.\d+)\s+-\s+"(.*)"\s*$`)
+
+// ListChapters runs `mp4chaps -l` and parses its stdout into the
+// project's chapter representation. Returns an empty slice (not an
+// error) when the file has no chapters — callers treat that as a
+// resolver miss rather than an error.
+//
+// Chapter Length is filled in pair-wise from the next chapter's
+// Start; the last chapter's Length stays zero so the caller can
+// supply the input's total duration via FillTrailingLength.
+//
+// This wraps mp4v2's chapter-atom reader, which understands more
+// MP4 chapter formats than `ffmpeg -f ffmetadata` does — the latter
+// silently drops chapters when the file's timescale is malformed
+// even if the chapter track itself is well-formed. mp4chaps is the
+// reliable fallback for the split command's chapter resolver.
+func (c *Client) ListChapters(ctx context.Context, path string) ([]audio.Chapter, error) {
+	res, err := exec.Run(ctx, exec.Cmd{
+		Name: c.MP4Chaps,
+		Args: []string{"-l", path},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mp4chaps -l: %w", err)
+	}
+	return parseMp4ChapsList(string(res.Stdout))
+}
+
+// parseMp4ChapsList scans mp4chaps's `-l` output and returns the
+// chapter list. Lines that don't match the chapter format (the
+// "QuickTime Chapters of ..." header, blank lines, etc.) are skipped.
+// Some files carry both QuickTime and Nero chapter atoms; mp4chaps
+// then prints both lists. We dedupe on Start time, keeping the first
+// occurrence — typically QuickTime, which is the format mp4chaps
+// writes by default.
+func parseMp4ChapsList(stdout string) ([]audio.Chapter, error) {
+	var (
+		chs  []audio.Chapter
+		seen = map[time.Duration]bool{}
+	)
+	for _, line := range strings.Split(stdout, "\n") {
+		m := reMp4ChapsListLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		start, err := audio.ParseDuration(m[2])
+		if err != nil {
+			return nil, fmt.Errorf("mp4chaps -l: parse start %q: %w", m[2], err)
+		}
+		if seen[start] {
+			continue
+		}
+		seen[start] = true
+		chs = append(chs, audio.Chapter{Start: start, Name: m[3]})
+	}
+	for i := 0; i+1 < len(chs); i++ {
+		chs[i].Length = chs[i+1].Start - chs[i].Start
+	}
+	return chs, nil
 }
 
 // RemoveChapters strips chapter atoms from the MP4 file at path via

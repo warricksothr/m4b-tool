@@ -69,7 +69,26 @@ markers.
   append each successful absolute source-dir path on completion. Lines
   starting with `#` and blank lines are ignored.
 - `--dry-run`: enumerate actions without executing.
-- `--jobs <N>` — default: 1. Parallel ffmpeg encoders.
+- `--jobs <N>` — default: `min(cpuCap, memCap)` where
+  `cpuCap = min(8, NumCPU - 1)` and `memCap = MemAvailable / 256MiB`
+  (on Linux; skipped on other platforms). Parallel ffmpeg encoders.
+  Pass `--jobs 1` to force serial execution. The CPU cap of 8
+  reflects the point where adding workers stops improving wall time
+  on typical audiobook content (disk I/O and shared decoder state
+  bottleneck before CPU does); `NumCPU - 1` leaves one core for the
+  OS so interactive work isn't starved; the memory cap stops a
+  sudden 8 × ~250 MB ffmpeg fan-out from pushing a tight host into
+  swap.
+- `--no-memory-cap` — disable the memory-aware part of the auto-jobs
+  default. Useful when `MemAvailable` is underreported (some WSL2
+  setups) and the user knows the host can fit the full CPU-cap
+  fan-out. Has no effect when `--jobs` is set explicitly.
+- `--quiet`, `-q` — suppress info/progress output on stderr. Errors
+  still print (they're returned from Run rather than logged). Stdout
+  is unaffected; pipe `2>/dev/null` on top for full silence.
+- `--verbose` — add a per-input/per-chapter `[i/N] done in <elapsed>`
+  line after each successful encode/extract, so wall-time progress is
+  visible on long batches. Quiet wins when both flags are set.
 
 **Audio encoding**
 - `--audio-format <fmt>` — default: `m4b`. One of `m4b`, `mp4`, `mp3`.
@@ -158,6 +177,17 @@ Split a single audio file into one file per chapter.
 - `--by-silence`: derive chapters from silence detection.
 - `--fixed-length <seconds>`: fixed-duration splits (float allowed).
 - `--reindex-chapters`: replace names with `1, 2, 3, ...`.
+- `--strip-title`: trim leading whitespace and zero characters from
+  each chapter Name (`"001"` → `"1"`). Applied after
+  `--reindex-chapters`, before `--chapter-prefix`. All-zero or
+  all-whitespace titles collapse to `"0"` so a downstream prefix
+  doesn't render as `"Chapter "`.
+- `--chapter-prefix <string>`: prepend a literal string to every
+  chapter Name. Applied after `--reindex-chapters` and `--strip-title`.
+  Use this to upgrade numeric-only source titles ("001", "002", ...)
+  to readable filenames ("Chapter 001", "Chapter 002", ... or
+  "Chapter 1", "Chapter 2", ... with `--strip-title`) without editing
+  a sidecar.
 
 **Silence**
 - `--add-silence <pre[,post]>`: pre/post silence in ms; single value
@@ -187,6 +217,45 @@ m4b-tool split --audio-format=mp3 --audio-bitrate=192k "data/my-album.flac"
 ```
 
 ## chapters
+
+Add, adjust, or import chapter markers on a single file.
+
+### `chapters export <input> [output]`
+
+Sub-subcommand that resolves chapters via the same priority chain as
+`split` (including the `mp4chaps -l` fallback) and writes them as an
+mp4chaps-format `.chapters.txt` sidecar.
+
+- `input` (required): single audio file.
+- `output` (optional): destination path. Default: `<input-base>.chapters.txt`
+  next to `input` — the conventional sidecar location, so the file is
+  picked up automatically by `split` (and by `mp4chaps -i`). Pass `-`
+  to write to stdout (useful for `| head -n 10` previews).
+- `--force`, `-f`: overwrite an existing output file (no-op for `-`).
+- `--reindex-chapters`, `--strip-title`, `--chapter-prefix <s>`:
+  same rename pipeline as `split` (see above). Lets you preview the
+  transformed names in the sidecar — pipe to `head` to spot-check, or
+  write to a real path and tweak in `$EDITOR` before re-running
+  `split` (which will read the sidecar back).
+
+**Two valid workflows; don't mix them:**
+
+1. **Flags on `split` only.** `chapters export` writes raw embedded
+   names; `split` applies the rename pipeline at extract time. Good
+   when no manual edits are needed.
+2. **Flags on `chapters export` only, then `split` flag-free.** Bake
+   the transformed names into the sidecar, tweak in `$EDITOR` if
+   wanted, then run `split` without the rename flags. `split` reads
+   the sidecar verbatim, so the flags must not be passed a second
+   time — doing so re-applies the prefix and produces e.g.
+   "Chapter Chapter 1".
+
+Intended for the "fix bare-numeric chapter names" workflow: dump the
+sidecar, edit it in `$EDITOR`, then re-run `split` (the sidecar is
+auto-detected; no extra flag needed unless you want to override the
+embedded chapters explicitly with `--use-existing-chapters-file`).
+
+### Top-level chapters command
 
 Add, adjust, or import chapter markers on a single file.
 

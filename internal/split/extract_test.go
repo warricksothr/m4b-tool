@@ -68,3 +68,58 @@ func TestBuildExtractMetadata_DropsAudiobookOnlyFields(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultBitrate(t *testing.T) {
+	cases := []struct {
+		name      string
+		sourceBps int
+		want      string
+	}{
+		{"unknown source → empty (ffmpeg default)", 0, ""},
+		{"negative (treated as unknown)", -1, ""},
+		{"low-bitrate audiobook AAC", 64_000, "64k"},
+		{"typical m4b (125 kbps)", 125_000, "125k"},
+		{"at the cap", 192_000, "192k"},
+		{"just over the cap", 192_001, "192k"},
+		{"FLAC-ish lossless if it reports a number", 1_411_000, "192k"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := defaultBitrate(tc.sourceBps); got != tc.want {
+				t.Errorf("defaultBitrate(%d) = %q, want %q", tc.sourceBps, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDefaultCodecForFormat(t *testing.T) {
+	cases := []struct {
+		format string
+		want   string
+	}{
+		// MP4 family stream-copies the source AAC.
+		{"mp4", "copy"},
+		{"m4a", "copy"},
+		{"m4b", "copy"},
+		{"MP4", "copy"}, // case-insensitive
+
+		// Non-MP4 containers must transcode — copy of an AAC stream
+		// into an MP3/FLAC/Ogg/Wav muxer fails with "Invalid audio
+		// stream", which is the bug this defaulter fixes.
+		{"mp3", "libmp3lame"},
+		{"flac", "flac"},
+		{"ogg", "libvorbis"},
+		{"opus", "libopus"},
+		{"wav", "pcm_s16le"},
+
+		// Unknown formats: fall through to copy and let ffmpeg surface
+		// the error rather than guessing wrong.
+		{"", "copy"},
+		{"weirdformat", "copy"},
+	}
+	for _, tc := range cases {
+		if got := defaultCodecForFormat(tc.format); got != tc.want {
+			t.Errorf("defaultCodecForFormat(%q) = %q, want %q", tc.format, got, tc.want)
+		}
+	}
+}

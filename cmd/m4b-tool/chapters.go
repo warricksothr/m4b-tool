@@ -13,7 +13,14 @@ import (
 // runChaptersCmd parses the `chapters` subcommand's flags and invokes
 // the orchestrator. Returns a process exit code (0 success, 1 error,
 // 2 usage).
+//
+// `chapters export ...` peels off as a sub-subcommand handled in
+// chapters_export.go — it has its own flag set and a different
+// positional shape.
 func runChaptersCmd(args []string) int {
+	if len(args) > 0 && args[0] == "export" {
+		return runChaptersExportCmd(args[1:])
+	}
 	fs := flag.NewFlagSet("chapters", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() {

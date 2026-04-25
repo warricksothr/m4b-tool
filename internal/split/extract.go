@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/warricksothr/m4b-tool/internal/audio"
 	"github.com/warricksothr/m4b-tool/internal/ffmpeg"
@@ -79,6 +80,7 @@ func extractAll(
 	extOpts ffmpeg.ExtractOptions,
 	tagBase audio.Tag,
 	jobCount int,
+	verbose bool,
 	stderr io.Writer,
 ) error {
 	if jobCount < 1 {
@@ -121,6 +123,7 @@ func extractAll(
 				perOpts.Metadata = buildExtractMetadata(tagBase, j.chapter, j.track, j.total)
 			}
 
+			started := time.Now()
 			if err := ff.ExtractSegment(ctx, input, j.out, j.chapter.Start, j.chapter.Length, perOpts); err != nil {
 				recordErr(err)
 				return
@@ -131,6 +134,12 @@ func extractAll(
 					recordErr(fmt.Errorf("write tags %q: %w", j.out, err))
 					return
 				}
+			}
+			if verbose {
+				// Round to 100ms — wall-time reports are rough by
+				// nature and the noise from sub-tenth precision just
+				// makes diffing two runs noisier.
+				_, _ = fmt.Fprintf(stderr, "[%d/%d] done in %s\n", j.track, j.total, time.Since(started).Round(100*time.Millisecond))
 			}
 		}
 	}

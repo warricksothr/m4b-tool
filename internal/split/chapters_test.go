@@ -132,6 +132,83 @@ func TestResolve_Priority_FixedLength_BeatsEverything(t *testing.T) {
 	}
 }
 
+func TestStripChapterTitles(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []audio.Chapter
+		want []audio.Chapter
+	}{
+		{"zero-padded numerics", []audio.Chapter{
+			{Name: "001"}, {Name: "002"}, {Name: "010"},
+		}, []audio.Chapter{
+			{Name: "1"}, {Name: "2"}, {Name: "10"},
+		}},
+		{"leading whitespace", []audio.Chapter{
+			{Name: "  Prologue"}, {Name: "\tChapter 1"},
+		}, []audio.Chapter{
+			{Name: "Prologue"}, {Name: "Chapter 1"},
+		}},
+		{"all-zero collapses to 0", []audio.Chapter{
+			{Name: "0"}, {Name: "000"}, {Name: "  "},
+		}, []audio.Chapter{
+			{Name: "0"}, {Name: "0"}, {Name: "0"},
+		}},
+		{"empty stays empty", []audio.Chapter{
+			{Name: ""},
+		}, []audio.Chapter{
+			{Name: ""},
+		}},
+		{"already-clean is a no-op", []audio.Chapter{
+			{Name: "Prologue"}, {Name: "1"},
+		}, []audio.Chapter{
+			{Name: "Prologue"}, {Name: "1"},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			StripChapterTitles(tt.in)
+			for i := range tt.in {
+				if tt.in[i].Name != tt.want[i].Name {
+					t.Errorf("[%d] got %q, want %q", i, tt.in[i].Name, tt.want[i].Name)
+				}
+			}
+		})
+	}
+}
+
+func TestNumericIndexFraction(t *testing.T) {
+	tests := []struct {
+		name string
+		chs  []audio.Chapter
+		want float64
+	}{
+		{"empty", nil, 0},
+		{"all zero-padded indices", []audio.Chapter{
+			{Name: "001"}, {Name: "002"}, {Name: "003"},
+		}, 1.0},
+		{"all bare integers", []audio.Chapter{
+			{Name: "1"}, {Name: "2"}, {Name: "3"},
+		}, 1.0},
+		{"one named, rest indices", []audio.Chapter{
+			{Name: "Prologue"}, {Name: "002"}, {Name: "003"}, {Name: "004"}, {Name: "005"},
+		}, 0.8},
+		{"all real titles", []audio.Chapter{
+			{Name: "Prologue"}, {Name: "Chapter One"}, {Name: "Epilogue"},
+		}, 0},
+		{"numeric but offset by one (zero-based)", []audio.Chapter{
+			{Name: "000"}, {Name: "001"}, {Name: "002"},
+		}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := numericIndexFraction(tt.chs)
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolve_NoSourceReturnsErr(t *testing.T) {
 	dir := t.TempDir()
 	audio := filepath.Join(dir, "no-meta.m4b")

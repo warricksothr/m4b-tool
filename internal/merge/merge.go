@@ -12,6 +12,7 @@ import (
 
 	"github.com/warricksothr/m4b-tool/internal/audio"
 	"github.com/warricksothr/m4b-tool/internal/ffmpeg"
+	"github.com/warricksothr/m4b-tool/internal/jobs"
 	"github.com/warricksothr/m4b-tool/internal/mp4v2"
 	"github.com/warricksothr/m4b-tool/internal/tag"
 	"github.com/warricksothr/m4b-tool/internal/tag/chapterstxt"
@@ -92,8 +93,25 @@ type Config struct {
 	// between consecutive parts. Zero means contiguous concat.
 	AddSilence time.Duration
 	// Jobs caps concurrent transcodes when NoConversion is false.
-	// Defaults to 1 (sequential) when 0.
+	// When 0, Run picks jobs.Default() — by default min(cpuCap,
+	// memoryCap).
 	Jobs int
+
+	// IgnoreMemoryCap disables the memory-aware part of the auto-jobs
+	// default. Has no effect when Jobs is set explicitly. See the
+	// matching field in split.Config for context.
+	IgnoreMemoryCap bool
+
+	// Quiet suppresses all info/progress output on stderr. Errors
+	// still surface via the Run() return value. Stdout (e.g. dry-run
+	// output) is unaffected.
+	Quiet bool
+
+	// Verbose adds a per-input "transcoding [i/N] ..." starting line
+	// and a "done in <elapsed>" line after each successful encode, so
+	// users see wall-time progress on long batches. Quiet wins when
+	// both are set.
+	Verbose bool
 
 	// --- Batch mode (M7c) ---
 
@@ -130,6 +148,9 @@ var supportedOutputExts = map[string]bool{".m4b": true, ".mp4": true, ".m4a": tr
 // set, otherwise each input is transcoded to a uniform AAC-in-MP4
 // intermediate so the concat demuxer can stream-copy the result.
 func Run(ctx context.Context, cfg Config) error {
+	if cfg.Jobs == 0 {
+		cfg.Jobs = jobs.Default(cfg.IgnoreMemoryCap)
+	}
 	if len(cfg.BatchPatterns) > 0 {
 		return runBatch(ctx, cfg)
 	}
@@ -144,6 +165,9 @@ func runSingle(ctx context.Context, cfg Config) error {
 	stderr := cfg.Stderr
 	if stderr == nil {
 		stderr = os.Stderr
+	}
+	if cfg.Quiet {
+		stderr = io.Discard
 	}
 	if err := validate(&cfg); err != nil {
 		return err
@@ -183,8 +207,8 @@ func runSingle(ctx context.Context, cfg Config) error {
 
 		encOpts := buildEncodeOptions(&cfg)
 		logf(stderr, "transcoding %d input(s) (codec=%s, jobs=%d, trim-silence=%t)\n",
-			len(inputs), nonEmpty(encOpts.Codec, "default"), effectiveJobs(cfg.Jobs), cfg.TrimSilence)
-		parts, err = encodeAll(ctx, ffClient, inputs, tmpDir, cfg.Jobs, encOpts)
+			len(inputs), nonEmpty(encOpts.Codec, "default"), cfg.Jobs, cfg.TrimSilence)
+		parts, err = encodeAll(ctx, ffClient, inputs, tmpDir, cfg.Jobs, encOpts, cfg.Verbose, stderr)
 		if err != nil {
 			return fmt.Errorf("transcode: %w", err)
 		}
@@ -363,13 +387,6 @@ func buildEncodeOptions(cfg *Config) ffmpeg.EncodeOptions {
 		TrimSilenceEnd:   cfg.TrimSilence,
 		Overwrite:        true,
 	}
-}
-
-func effectiveJobs(j int) int {
-	if j < 1 {
-		return 1
-	}
-	return j
 }
 
 func nonEmpty(s, fallback string) string {
