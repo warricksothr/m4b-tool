@@ -37,6 +37,12 @@ env:
 
 jobs:
   build-and-push:
+    # Skip on Forgejo (which mirrors this branch from the internal
+    # instance). On real GitHub `github.server_url` is
+    # `https://github.com`; on Forgejo it's the instance URL, so this
+    # condition is false there and the job is cleanly skipped instead
+    # of stalling on a non-existent `ubuntu-latest` runner.
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
