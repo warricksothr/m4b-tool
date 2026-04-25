@@ -18,3 +18,8 @@
 # Listed in both .release-exclude and .release-only: the exclude step
 # drops main's README, the only step restores release's README.
 README.md
+
+# Release-cut helper scripts. Live only on `release`; the next squash
+# from `main` would otherwise leave them on the floor since `main`
+# never carries them.
+.release-tools/
