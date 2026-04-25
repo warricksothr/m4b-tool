@@ -24,7 +24,7 @@ or newer, and refuse older only if output format differs.
 | Tool   | Pinned version | Notes                               |
 |--------|---------------|--------------------------------------|
 | ffmpeg | 5.0.1         | Needs `silencedetect`, `-f ffmetadata`, `-f concat`, `-movflags +faststart`. |
-| mp4v2  | 2.1.1         | Supplies `mp4chaps`, `mp4art`, `mp4tags`, `mp4info`. Upstream is unmaintained and has been dropped from Debian/Ubuntu repos; the maintained continuation is [`enzo1982/mp4v2`](https://github.com/enzo1982/mp4v2). Build from source with `cmake`; the Docker image in Milestone 9 should clone and build it rather than relying on a distro package. |
+| mp4v2  | 2.1.0         | Supplies `mp4chaps`, `mp4art`, `mp4tags`, `mp4info`. Upstream is unmaintained and has been dropped from Debian/Ubuntu repos; the maintained continuation is [`enzo1982/mp4v2`](https://github.com/enzo1982/mp4v2), with `v2.1.0` as its latest tagged release. Build from source with `cmake`; the Docker image in Milestone 9 should clone and build it rather than relying on a distro package. |
 | fdkaac | 2.0.1         | Optional.                            |
 | tone   | 0.2.5         | Optional; min ≥ 0.0.9 checked by PHP. |
 

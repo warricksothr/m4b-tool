@@ -27,7 +27,7 @@ FROM docker.io/library/debian:bookworm-slim AS mp4v2
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git ca-certificates cmake build-essential \
     && rm -rf /var/lib/apt/lists/*
-ARG MP4V2_REF=master
+ARG MP4V2_REF=v2.1.0
 RUN git clone --depth 1 --branch "${MP4V2_REF}" https://github.com/enzo1982/mp4v2.git /src/mp4v2
 RUN cmake -S /src/mp4v2 -B /build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /build -j"$(nproc)" \
